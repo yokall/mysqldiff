@@ -107,7 +107,7 @@ Returns the additional options added to the table definition.
 
 =item * isa_field
 
-Returns 1 if given field is used in the current table definition, otherwise 
+Returns 1 if given field is used in the current table definition, otherwise
 returns 0.
 
 =item * isa_primary
@@ -163,7 +163,7 @@ sub _parse {
     debug(4,"parsing table def '$self->{def}'");
 
     my $name;
-    if ($lines[0] =~ /^\s*create\s+table\s+(\S+)\s+\(\s*$/i) {
+    if ($lines[0] =~ /^\s*create\s+table\s+((?:`)?.*(?:`)?)\s+\(\s*$/i) {
         $self->{name} = $1;
         debug(3,"got table name '$self->{name}'");
         shift @lines;

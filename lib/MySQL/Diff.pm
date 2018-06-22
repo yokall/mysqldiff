@@ -127,7 +127,7 @@ sub diff {
             push @changes, $self->_diff_tables($table1, $table2);
         } else {
             debug(3,"table '$name' dropped");
-            push @changes, "DROP TABLE $name;\n\n"
+            push @changes, "DROP TABLE `$name`;\n\n"
                 unless $self->{opts}{'only-both'} || $self->{opts}{'keep-old-tables'};
         }
     }
