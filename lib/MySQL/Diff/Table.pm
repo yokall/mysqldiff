@@ -138,6 +138,7 @@ sub def             { my $self = shift; return $self->{def};            }
 sub name            { my $self = shift; return $self->{name};           }
 sub field           { my $self = shift; return $self->{fields}{$_[0]};  }
 sub fields          { my $self = shift; return $self->{fields};         }
+sub field_array     { my $self = shift; return $self->{field_array};    }
 sub primary_key     { my $self = shift; return $self->{primary_key};    }
 sub indices         { my $self = shift; return $self->{indices};        }
 sub options         { my $self = shift; return $self->{options};        }
@@ -171,6 +172,8 @@ sub _parse {
         croak "couldn't figure out table name";
     }
 
+    my $field_index = 0;
+    my @field_array = ();
     while (@lines) {
         $_ = shift @lines;
         s/^\s*(.*?),?\s*$/$1/; # trim whitespace and trailing commas
@@ -226,7 +229,10 @@ sub _parse {
             my ($field, $fdef) = ($1, $2);
             croak "definition for field '$field' duplicated in table '$self->{name}'\n"
                 if $self->{fields}{$field};
-            $self->{fields}{$field} = $fdef;
+            $self->{fields}{$field}{field_definition} = $fdef;
+            $self->{fields}{$field}{field_index} = $field_index;
+            push @field_array, $field;
+            $field_index++;
             debug(4,"got field def '$field': $fdef");
             next unless $fdef =~ /\s+AUTO_INCREMENT\b/;
             $self->{auto_inc}{$field} = 1;
@@ -236,6 +242,8 @@ sub _parse {
 
         croak "unparsable line in definition for table '$self->{name}':\n$_";
     }
+
+    $self->{field_array} = \@field_array;
 
     warn "table '$self->{name}' didn't have terminator\n"
         unless defined $self->{options};

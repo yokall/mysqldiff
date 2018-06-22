@@ -179,7 +179,7 @@ sub _diff_banner {
     my $now = scalar localtime();
     return <<EOF;
 ## mysqldiff $VERSION
-## 
+##
 ## Run on $now
 $opt_text##
 ## --- $summary1
@@ -213,13 +213,16 @@ sub _diff_fields {
 
     return () unless $fields1 || $fields2;
 
+    my $table1_field_array = $table1->field_array;
+
     my @changes;
-  
+
     if($fields1) {
-        for my $field (keys %$fields1) {
+        my @fields_list = keys %$fields1;
+        for my $field (@fields_list) {
             debug(3,"table1 had field '$field'");
-            my $f1 = $fields1->{$field};
-            my $f2 = $fields2->{$field};
+            my $f1 = $fields1->{$field}->{field_definition};
+            my $f2 = $fields2->{$field}->{field_definition};
             if ($fields2 && $f2) {
                 if ($self->{opts}{tolerant}) {
                     for ($f1, $f2) {
@@ -227,7 +230,7 @@ sub _diff_fields {
                     }
                 }
                 if ($f1 ne $f2) {
-                    if (not $self->{opts}{tolerant} or 
+                    if (not $self->{opts}{tolerant} or
                         (($f1 !~ m/$f2\(\d+,\d+\)/) and
                          ($f1 ne "$f2 DEFAULT '' NOT NULL") and
                          ($f1 ne "$f2 NOT NULL") ))
@@ -238,14 +241,18 @@ sub _diff_fields {
                         $change .= " # was $f1" unless $self->{opts}{'no-old-defs'};
                         $change .= "\n";
                         push @changes, $change;
+
+                        $fields1->{$field}->{field_definition} = $f2;
                     }
                 }
             } elsif (!$self->{opts}{'keep-old-columns'}) {
                 debug(3,"field '$field' removed");
                 my $change = "ALTER TABLE $name1 DROP COLUMN $field;";
-                $change .= " # was $fields1->{$field}" unless $self->{opts}{'no-old-defs'};
+                $change .= " # was $fields1->{$field}->{field_definition}" unless $self->{opts}{'no-old-defs'};
                 $change .= "\n";
                 push @changes, $change;
+
+                ($fields1, $table1_field_array) = _drop_field($field, $fields1, $table1_field_array);
             }
         }
     }
@@ -264,10 +271,80 @@ sub _diff_fields {
                 }
                 push @changes, "$changes;\n";
             }
+            else {
+                $after = 'FIRST';
+            }
+
+            ($fields1, $table1_field_array) = _reorder_fields($field, $table2_index, $fields1, $table1_field_array);
+
+            my $change = "ALTER TABLE $name1 CHANGE COLUMN $field $field $fields1->{$field}->{field_definition} $after;";
+            $change .= " # was $fields1->{$field}->{field_definition}" unless $self->{opts}{'no-old-defs'};
+            $change .= "\n";
+            push @changes, $change;
         }
     }
 
     return @changes;
+}
+
+sub _drop_field {
+    my $field_name = shift;
+    my $fields = shift;
+    my $table_field_array_ref = shift;
+
+    my @table_field_array = @{$table_field_array_ref};
+
+    my $field_index = $fields->{$field_name}->{field_index};
+
+    for (my $index = $field_index; $index < $#table_field_array; $index++) {
+        my $field = $table_field_array[$index];
+
+        $fields->{$field}->{field_index} = ($index - 1);
+    }
+
+    splice @table_field_array, $field_index, 1;
+    delete $fields->{$field_name};
+
+    return $fields, \@table_field_array;
+}
+
+sub _add_field {
+    my $field_name = shift;
+    my $field_definition = shift;
+    my $fields = shift;
+    my $table_field_array_ref = shift;
+
+    my @table_field_array = @{$table_field_array_ref};
+
+    push @table_field_array, $field_name;
+
+    $fields->{$field_name}->{field_definition} = $field_definition;
+    $fields->{$field_name}->{field_index} = $#table_field_array;
+
+    return $fields, \@table_field_array;
+}
+
+sub _reorder_fields {
+    my $field_name = shift;
+    my $new_field_index = shift;
+    my $fields = shift;
+    my $fields_array_ref = shift;
+
+    my @fields_array = @{$fields_array_ref};
+
+    my $current_field_index = $fields->{$field_name}->{field_index};
+
+    splice @fields_array, $current_field_index, 1;
+
+    splice @fields_array, $new_field_index, 0, $field_name;
+
+    for (my $index = 0; $index < $#fields_array; $index++) {
+        my $field = $fields_array[$index];
+
+        $fields->{$field}->{field_index} = ($index);
+    }
+
+    return $fields, \@fields_array;
 }
 
 sub _diff_indices {
@@ -285,7 +362,7 @@ sub _diff_indices {
     if($indices1) {
         for my $index (keys %$indices1) {
             debug(3,"table1 had index '$index'");
-            my $old_type = $table1->is_unique($index) ? 'UNIQUE' : 
+            my $old_type = $table1->is_unique($index) ? 'UNIQUE' :
                            $table1->is_fulltext($index) ? 'FULLTEXT INDEX' : 'INDEX';
 
             if ($indices2 && $indices2->{$index}) {
@@ -294,7 +371,7 @@ sub _diff_indices {
                     ($table1->is_fulltext($index) xor $table2->is_fulltext($index)) )
                 {
                     debug(3,"index '$index' changed");
-                    my $new_type = $table2->is_unique($index) ? 'UNIQUE' : 
+                    my $new_type = $table2->is_unique($index) ? 'UNIQUE' :
                                    $table2->is_fulltext($index) ? 'FULLTEXT INDEX' : 'INDEX';
 
                     my $changes = "ALTER TABLE $name1 DROP INDEX $index;";
@@ -344,7 +421,7 @@ sub _diff_primary_key {
     return () unless $primary1 || $primary2;
 
     my @changes;
-  
+
     if ($primary1 && ! $primary2) {
         debug(3,"primary key '$primary1' dropped");
         my $changes = _index_auto_col($table2, $primary1);
