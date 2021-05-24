@@ -296,10 +296,9 @@ sub apply {
   }
 
   print "Applying changes ... ";
-  my $args_ref = $db1->auth_args;
-  unshift @$args_ref, q{mysql};
-  push @$args_ref, $db0;
-  my $pipe = shell_quote @$args_ref;
+
+  my $args = $db1->{_source}{auth};
+  my $pipe = "mysql $args $db0";
   my $fh = IO::File->new("|$pipe") or die "Couldn't open pipe to '$pipe': $!\n";
   print $fh $diffs;
   $fh->close or die "Couldn't close pipe: $!\n";
