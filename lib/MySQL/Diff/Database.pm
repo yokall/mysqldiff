@@ -293,7 +293,7 @@ sub _get_defs {
         }
     }
 
-    my $fh = IO::File->new("mysqldump -d $single_transaction $args $db $tables 2>&1 |")
+    my $fh = IO::File->new("mysqldump -x -d $single_transaction $args $db $tables 2>&1 |")
       or die "Couldn't read ${db}'s table defs via mysqldump: $!\n";
 
     debug( 3, "running mysqldump -d $single_transaction $args $db $tables" );
